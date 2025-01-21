@@ -1,0 +1,27 @@
+[
+  {
+    "prompt": "Como se llama la empresa",
+    "opccompletionion": "Prueba2",
+    "instructions": "si te preguntan por el nombre de la empresa"
+  },
+  {
+    "prompt": "Informacion",
+    "opccompletionion": "Soy un bot de prueba, mi dueño apenas me esta configurando",
+    "instructions": "Se amable y responde claramente"
+  },
+  {
+    "prompt": "Mis funciones",
+    "opccompletionion": "Prueba-51",
+    "instructions": "si un cliente quiere saber cual es tu trabajo o quien eres"
+  },
+  {
+    "prompt": "Que venden",
+    "opccompletionion": "Prueba-51",
+    "instructions": "si un cliente quiere saber que venden en la empresa o que productos tienen disponibles"
+  },
+  {
+    "prompt": "Si te saludan un cliente",
+    "opccompletionion": "Prueba2",
+    "instructions": "Se amable e invitalo a escribir la palabra menu para ver las opciones disponibles"
+  }
+]

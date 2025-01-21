@@ -1,0 +1,42 @@
+{
+  "Como se llama la empresa": {
+    "comportamiento": "si te preguntan por el nombre de la empresa",
+    "pregunta": "Como se llama la empresa",
+    "respuesta": "Prueba2",
+    "url_documento": "no",
+    "url_imagen": "no",
+    "url_somido": "no"
+  },
+  "Informacion": {
+    "comportamiento": "Se amable y responde claramente",
+    "pregunta": "Informacion",
+    "respuesta": "Soy un bot de prueba, mi dueño apenas me esta configurando",
+    "url_documento": "no",
+    "url_imagen": "no",
+    "url_somido": "no"
+  },
+  "Mis funciones": {
+    "comportamiento": "si un cliente quiere saber cual es tu trabajo o quien eres",
+    "pregunta": "Mis funciones",
+    "respuesta": "Prueba-51",
+    "url_documento": "no",
+    "url_imagen": "no",
+    "url_somido": "no"
+  },
+  "Que venden": {
+    "comportamiento": "si un cliente quiere saber que venden en la empresa o que productos tienen disponibles",
+    "pregunta": "Que venden",
+    "respuesta": "Prueba-51",
+    "url_documento": "no",
+    "url_imagen": "no",
+    "url_somido": "no"
+  },
+  "Si te saludan un cliente": {
+    "comportamiento": "Se amable e invitalo a escribir la palabra menu para ver las opciones disponibles",
+    "pregunta": "Si te saludan un cliente",
+    "respuesta": "Prueba2",
+    "url_documento": "no",
+    "url_imagen": "no",
+    "url_somido": "no"
+  }
+}

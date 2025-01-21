@@ -1,0 +1,16 @@
+node_modules
+*_sessions
+.env
+*.log
+*.png
+tmp/*
+!tmp/.gitkeep
+
+# managed
+**.data.json
+**.node-persist**
+**_IGNORE_**
+# end managed
+app-macos.*
+watbot-c14e5-firebase-adminsdk-6rstq-d831ae39da.json
+usuario/

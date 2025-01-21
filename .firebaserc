@@ -1,0 +1,9 @@
+{
+  "projects": {
+    "default": "verzay-15226",
+    "verzay": "verzay-15226"
+  },
+  "targets": {},
+  "etags": {},
+  "dataconnectEmulatorConfig": {}
+}
