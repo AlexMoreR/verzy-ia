@@ -883,37 +883,6 @@ if (pdfs && Array.isArray(pdfs)) {
     const nombrePDF = path.basename(storagePathPdf);
     const rutaPDFLocal = path.join(directorioBase, nombrePDF);
 
-    if (!fs.existsSync(rutaPDFLocal)) {
-      console.log(`PDF no encontrado localmente. Descargando desde: ${storagePathPdf}`);
-      try {
-        const resultado = await descargarArchivoDesdeFirebase(
-          storagePathPdf,
-          rutaPDFLocal,
-          3,       // maxRetries
-          2000     // retryDelayMs
-        );
-        if (!resultado) {
-          console.warn(`El PDF no se pudo descargar tras reintentos: ${storagePathPdf}`);
-          mensajes.push({ body: "Lo sentimos, el PDF no está disponible." });
-          continue;
-        }
-      } catch (error) {
-        console.error(`Error general al descargar el PDF: ${error.message}`);
-        mensajes.push({ body: "Ocurrió un problema al descargar el PDF." });
-        continue;
-      }
-    }
-
-    // Validar tamaño > 0
-    const stats = fs.statSync(rutaPDFLocal);
-    if (stats.size === 0) {
-      console.warn(`El PDF '${rutaPDFLocal}' está vacío (0 bytes).`);
-      mensajes.push({
-        body: "Lo sentimos, el PDF no se pudo enviar. Intenta más tarde."
-      });
-      continue;
-    }
-
     // Si es el primer "media", mandas el texto
     if (firstMedia) {
       mensajes.push({ body: textoMensaje.trim() || '' });
@@ -1348,25 +1317,6 @@ function configuracion_dinamica(usuario) {
 }
 
 // Sección 4: Funciones de almacenamiento de datos
-async function guardar_jeison(usuario) {
-  const ruta = 'bot_clientes/' + usuario + '/productos';
-  const conectar_firebase = admin.database().ref(ruta);
-
-  conectar_firebase.on('value', async (snapshot) => {
-    try {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        const datosJSON = JSON.stringify(data, null, 2);
-        fs.writeFileSync(`usuarios/${usuario}/productos.json`, datosJSON, "utf-8");
-        guardarJeisonCodigos(usuario);
-      } else {
-        throw new Error("Los datos no existen en Firebase");
-      }
-    } catch (error) {
-      console.error(error.message);
-    }
-  });
-}
 
 function guardar_informacion_de_preguntas(usuario) {
   const ruta = 'bot_clientes/' + usuario + '/preguntas_y_respuestas';
@@ -1397,88 +1347,6 @@ function guardar_clientes(usuario) {
       console.log('Error de conexión para crear el catálogo clientes de JSON');
     }
   });
-}
-
-async function guardarJeisonCodigos(usuario) {
-  imagenes_catalogo = [];
-  imagenes_pijamas = [];
-  imagenes_ropa_de_vestir = [];
-  codigos = [];
-  codigos_dos = [];
-  categorias_lista = [];
-  categoria_disparadores = [];
-  const imagenesPorCategoria = {};
-
-  const ruta = 'bot_clientes/' + usuario + '/productos';
-  const rootRef = admin.database().ref(ruta);
-
-  try {
-    const productosSnapshot = await rootRef.once('value');
-    if (productosSnapshot.exists()) {
-      productosSnapshot.forEach((childSnapshot) => {
-        const codigo = childSnapshot.child('codigo').val();
-        const url = childSnapshot.child('url').val();
-        const categoria = childSnapshot.child('categoria').val();
-        const categorias_opciones = childSnapshot.child('categoria').val();
-
-        categorias_lista.push({ categoria: categorias_opciones, opcion: categorias_opciones });
-
-        if (!categoria_disparadores.includes(categorias_opciones)) {
-          categoria_disparadores.push(categorias_opciones);
-        }
-
-        if (codigo !== null) {
-          codigos.push(codigo);
-          codigos_dos.push({ pregunta: codigo, respuesta: codigo });
-        }
-
-        if (url !== null) {
-          imagenes_catalogo.push({ imageUrl: url });
-        }
-
-        if (categoria !== null && url !== null) {
-          if (!imagenesPorCategoria[categoria]) {
-            imagenesPorCategoria[categoria] = [];
-          }
-          imagenesPorCategoria[categoria].push({ imageUrl: url });
-        }
-      });
-
-      const outputFolderBase = `./usuarios/${usuario}`;
-
-      for (const categoria in imagenesPorCategoria) {
-        const categoriaFolder = `${outputFolderBase}/${categoria}`;
-        if (!fs.existsSync(categoriaFolder)) {
-          fs.mkdirSync(categoriaFolder);
-        }
-
-        const imagenesCategoria = imagenesPorCategoria[categoria];
-        downloadImagesFromUrls(imagenesCategoria, categoriaFolder, categoria)
-          .catch((err) => {
-            console.error(`Error al descargar imágenes para ${categoria}:`, err);
-          });
-      }
-
-      const disparador_categorias_sistena = JSON.stringify(categoria_disparadores, null, 2);
-      fs.writeFileSync(`usuarios/${usuario}/categorias_disparadores.json`, disparador_categorias_sistena, "utf-8");
-
-      const datos_categorias = JSON.stringify(categorias_lista, null, 2);
-      fs.writeFileSync(`usuarios/${usuario}/categorias.json`, datos_categorias, "utf-8");
-
-      const datosJSON = JSON.stringify(codigos, null, 2);
-      fs.writeFileSync(`usuarios/${usuario}/codigos.json`, datosJSON, "utf-8");
-
-      const datos_disparadores = JSON.stringify(codigos_dos, null, 2);
-      fs.writeFileSync(`usuarios/${usuario}/codigos_disparadores.json`, datos_disparadores, "utf-8");
-
-      console.log("Datos guardados en codigos.json");
-    } else {
-      console.log("No se encontraron datos en la ubicación de productos.");
-    }
-  } catch (error) {
-    console.error(error.message);
-    throw error;
-  }
 }
 
 async function crear_promt(usuario) {
@@ -2686,79 +2554,79 @@ const main_dos = async (user_id) => {
             }
         });
     }
-}
+  }
 
-function enviarMensajesConIntervalo(usuario, adapterProvider) {
-    if (enviar_publicidad == "activa") {
-        // Obtener las palabras clave configuradas en "Bot Promoción"
-        const publicidadRef = db.ref('bot_clientes/' + usuario + "/publicidad/Bot promociòn");
-        publicidadRef.child('keywords').once('value', (snapshot) => {
-            const keywords = snapshot.val() || [];
+  function enviarMensajesConIntervalo(usuario, adapterProvider) {
+      if (enviar_publicidad == "activa") {
+          // Obtener las palabras clave configuradas en "Bot Promoción"
+          const publicidadRef = db.ref('bot_clientes/' + usuario + "/publicidad/Bot promociòn");
+          publicidadRef.child('keywords').once('value', (snapshot) => {
+              const keywords = snapshot.val() || [];
 
-            fs.readFile('usuarios/' + usuario + "/clientes.json", 'utf8', (err, data) => {
-                if (err) {
-                    console.error('Error al leer el archivo clientes.json:', err);
-                    return;
-                }
+              fs.readFile('usuarios/' + usuario + "/clientes.json", 'utf8', (err, data) => {
+                  if (err) {
+                      console.error('Error al leer el archivo clientes.json:', err);
+                      return;
+                  }
 
-                try {
-                    const numerosTelefonos = JSON.parse(data);
-                    let indice = 0;
-                    const intervalo = setInterval(() => {
-                        if (indice < numerosTelefonos.length) {
-                            const numero = numerosTelefonos[indice];
-                            const clientesRef = db.ref('bot_clientes/' + usuario + "/clientes");
-                            clientesRef.child(numero).child('publicidad').once('value', (snapshot) => {
-                                if (!snapshot.exists()) {
-                                    enviarMensaje(numero, usuario, keywords, adapterProvider);
-                                } else {
-                                    console.log('El número', numero, 'ya tiene el campo "publicidad". Saltando al siguiente.');
-                                }
-                            });
-                            indice++;
-                        } else {
-                            clearInterval(intervalo);
-                        }
-                    }, 30 * 1000);
-                } catch (error) {
-                    console.error('Error al analizar el contenido de clientes.json:', error);
-                }
-            });
-        });
-    }
-}
+                  try {
+                      const numerosTelefonos = JSON.parse(data);
+                      let indice = 0;
+                      const intervalo = setInterval(() => {
+                          if (indice < numerosTelefonos.length) {
+                              const numero = numerosTelefonos[indice];
+                              const clientesRef = db.ref('bot_clientes/' + usuario + "/clientes");
+                              clientesRef.child(numero).child('publicidad').once('value', (snapshot) => {
+                                  if (!snapshot.exists()) {
+                                      enviarMensaje(numero, usuario, keywords, adapterProvider);
+                                  } else {
+                                      console.log('El número', numero, 'ya tiene el campo "publicidad". Saltando al siguiente.');
+                                  }
+                              });
+                              indice++;
+                          } else {
+                              clearInterval(intervalo);
+                          }
+                      }, 30 * 1000);
+                  } catch (error) {
+                      console.error('Error al analizar el contenido de clientes.json:', error);
+                  }
+              });
+          });
+      }
+  }
 
-function estado_publicidad(usuario, adapterProvider) {
-    const conectar_firebase = db.ref('bot_clientes/' + usuario + "/publicidad");
-    conectar_firebase.on('value', (snapshot) => {
-        try {
-            if (snapshot.exists()) {
-                const data = snapshot.val();
-                const publicidadData = data['Bot promociòn'];
+  function estado_publicidad(usuario, adapterProvider) {
+      const conectar_firebase = db.ref('bot_clientes/' + usuario + "/publicidad");
+      conectar_firebase.on('value', (snapshot) => {
+          try {
+              if (snapshot.exists()) {
+                  const data = snapshot.val();
+                  const publicidadData = data['Bot promociòn'];
 
-                if (publicidadData) {
-                    const estado = publicidadData.estado;
-                    titulo = `*${publicidadData.titulo}*`;
-                    texto = `${titulo}\n${publicidadData.texto}`;
-                    url_foto = publicidadData.url_imagen;
-                    masiva = estado;
-                    enviar_publicidad = estado;
+                  if (publicidadData) {
+                      const estado = publicidadData.estado;
+                      titulo = `*${publicidadData.titulo}*`;
+                      texto = `${titulo}\n${publicidadData.texto}`;
+                      url_foto = publicidadData.url_imagen;
+                      masiva = estado;
+                      enviar_publicidad = estado;
 
-                    if (masiva == "activa") {
-                        enviarMensajesConIntervalo(usuario, adapterProvider);
-                    }
-                    console.log("Estado de la publicidad 'Bot promociòn':", masiva);
-                } else {
-                    console.log('No se encontraron datos para la publicidad "Bot promociòn".');
-                }
-            } else {
-                console.log('No se encontraron datos en el nodo "publicidad".');
-            }
-        } catch (error) {
-            console.error('Error al obtener el estado de la publicidad:', error.message);
-        }
-    });
-}
+                      if (masiva == "activa") {
+                          enviarMensajesConIntervalo(usuario, adapterProvider);
+                      }
+                      console.log("Estado de la publicidad 'Bot promociòn':", masiva);
+                  } else {
+                      console.log('No se encontraron datos para la publicidad "Bot promociòn".');
+                  }
+              } else {
+                  console.log('No se encontraron datos en el nodo "publicidad".');
+              }
+          } catch (error) {
+              console.error('Error al obtener el estado de la publicidad:', error.message);
+          }
+      });
+  }
 
 
 
@@ -2799,10 +2667,9 @@ function estado_publicidad(usuario, adapterProvider) {
           global.usuario_dinamico = user_id;
           escucharCambios(usuario_dinamico);
           configuracion_dinamica(usuario_dinamico);
-          guardar_jeison(usuario_dinamico);
           guardar_informacion_de_preguntas(usuario_dinamico);
           guardar_clientes(usuario_dinamico);
-          guardarJeisonCodigos(usuario_dinamico);
+          
           crear_promt(usuario_dinamico);
           estado_publicidad(usuario_dinamico, adapterProvider);
 
@@ -2829,10 +2696,6 @@ module.exports = main_dos;
 
 const args = process.argv.slice(2);
 const usuarioNuevo = args.find(arg => arg.startsWith('--usuario_nuevo=')).split('=')[1];
-
-// Cambiar API
-const organization = process.env.ORGANIZATION || "org-2jokWsVKJY0QM2LwsGE2dQ33";
-const api_gpt = process.env.API_GPT || "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";
 
 // Iniciar el proceso de carga de usuarios y generación de configuración
 main_dos(usuarioNuevo);
