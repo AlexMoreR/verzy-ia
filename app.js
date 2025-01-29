@@ -1,3 +1,7 @@
+require("./instrument");
+
+const FirebaseAdapter = require("./FirebaseAdapter")
+
 require("dotenv").config();
 const axios = require('axios');
 const uuid = require('uuid');
@@ -21,6 +25,23 @@ const { pipeline } = require('stream');
 const fsPromises = require('fs').promises;
 const { promisify } = require('util');
 const pipelineAsync = promisify(pipeline);
+
+//Funciones de embedding
+
+// Sobrescribir console.log
+const originalLog = console.log;
+console.log = (...args) => {
+  const fechaYHora = new Date().toLocaleString('es-CO', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+  originalLog(`[${fechaYHora}]`, ...args);
+};
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -126,8 +147,6 @@ function sleep(ms) {
 let disparadoresCargados = {};
 let embeddingsCargados = []; // Array para almacenar las embeddings cargadas desde el archivo.
 
-let disparadoresCargadosPromise = null;
-
 // Función para guardar embeddings en un archivo JSON
 async function guardarEmbeddings(usuario, disparadores) {
   const embeddings = [];
@@ -152,7 +171,6 @@ async function guardarEmbeddings(usuario, disparadores) {
   fs.writeFileSync(embeddingsPath, JSON.stringify(embeddings, null, 2), "utf-8");
   console.log(`Embeddings guardados en ${embeddingsPath}`);
 }
-
 
 // Función para cargar embeddings desde el archivo, si existe.
 function cargarEmbeddingsDesdeArchivo(usuario) {
@@ -454,7 +472,7 @@ async function descargarArchivoDesdeFirebase(
  */
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-  }
+}
 
 // Función disparadorManual                       (modificada para usar embeddings desde archivo)
 
@@ -954,64 +972,8 @@ if (pdfs && Array.isArray(pdfs)) {
 }
 
 // Sección 1: Funciones de configuración
-async function generarConfiguracion(usuarios) {
-  const apps = usuarios.map((usuario) => ({
-    name: usuario,
-    script: 'app.js',
-    args: `--usuario_nuevo=${usuario}`,
-    instances: 1,
-    exec_mode: 'fork',
-  }));
-  const config = `module.exports = { apps: ${JSON.stringify(apps, null, 2)} };`;
-  fs.writeFileSync('ecosystem.config.js', config);
-  console.log('Archivo ecosystem.config.js actualizado con todos los usuarios.');
-}
-
-async function cargarUsuarios() {
-  const usuariosRef = db.ref('bot_clientes');
-  const snapshot = await usuariosRef.once('value');
-  const usuarios = Object.keys(snapshot.val());
-  console.log('Usuarios cargados:', usuarios);
-  await generarConfiguracion(usuarios);
-  console.log('Proceso de carga de usuarios y generación de configuración completado.');
-  return 'Proceso completado: Usuarios cargados y configuración generada.';
-}
-
-function crearNuevoCliente(usuario) {
-  const usuariosRef = db.ref('bot_clientes/' + usuario);
-
-  usuariosRef.once('value', (snapshot) => {
-    if (!snapshot.exists()) {
-      // Llamar a la función para asignar prueba gratuita
-      asignarPruebaGratis(usuario);
-
-      // Aquí puedes agregar cualquier otra lógica de configuración inicial que necesites
-      console.log(`Cliente ${usuario} creado exitosamente con prueba gratuita.`);
-    } else {
-      console.log(`El cliente ${usuario} ya existe.`);
-    }
-  }).catch((error) => {
-    console.error("Error al crear un nuevo cliente:", error);
-  });
-}
 
 // Sección 2: Funciones de Firebase
-
-function cargarFraseCatalogo(usuario) {
-  const ruta = `bot_clientes/${usuario}/a_servidor/configuracion/frase_catalogo`; 
-  const fraseRef = db.ref(ruta);
-
-  fraseRef.on('value', (snapshot) => {
-    if (snapshot.exists()) {
-      fraseCatalogo = snapshot.val();
-      console.log("Frase de catálogo cargada:", fraseCatalogo);
-    } else {
-      console.log("El nodo 'frase_catalogo' no existe o está vacío.");
-    }
-  }, (error) => {
-    console.error("Error al cargar la frase de catálogo:", error);
-  });
-}
 
 function cargarMensajeASoporte(usuario) {
   const ruta = `bot_clientes/${usuario}/a_servidor/configuracion/mensaje_a_soporte`; // Función para cargar el mensaje a soporte desde Firebase
@@ -1640,73 +1602,18 @@ try {
 }
 
 // Sección 6: Funciones adicionales
-const employeesAddonConfig = {
-  model: "gpt-4-1106-preview",
-  temperature: 0,
-  apiKey: process.env.OPENAI_API_KEY,
-};
 
-async function createPdfWithImages(imagePaths, outputPath) {
-  const { PDFDocument, rgb } = require('pdf-lib');
-  const fs_dos = require('fs').promises;
-  const pdfDoc = await PDFDocument.create();
-
-  for (const imagePath of imagePaths) {
-    const imageBytes = await fs_dos.readFile(imagePath);
-    const embeddedImage = await pdfDoc.embedJpg(imageBytes);
-    const page = pdfDoc.addPage([embeddedImage.width, embeddedImage.height]);
-    const imageOptions = { x: 0, y: 0, width: embeddedImage.width, height: embeddedImage.height };
-    page.drawImage(embeddedImage, imageOptions);
-  }
-
-  const pdfBytes = await pdfDoc.save();
-  await fs_dos.writeFile(outputPath, pdfBytes);
-}
-
-async function downloadImagesFromUrls(imageUrls, outputFolder, categoria) {
-  const axios_nuevo = require('axios');
-  const fs_nuevo = require('fs').promises;
-  let downloadedCount = 0;
-  const imagePaths = [];
-
-  for (let i = 0; i < imageUrls.length; i++) {
-    const imageUrl = imageUrls[i].imageUrl;
-    const outputPath = `${outputFolder}/imagen_${i}.jpg`;
-    imagePaths.push(outputPath);
-
-    try {
-      const response = await axios_nuevo.get(imageUrl, { responseType: 'arraybuffer' });
-      const imageBuffer = Buffer.from(response.data);
-      await fs_nuevo.writeFile(outputPath, imageBuffer);
-      downloadedCount++;
-
-      if (downloadedCount === imageUrls.length) {
-        const outputPath = `${outputFolder}/${categoria}_catalogo.pdf`;
-        createPdfWithImages(imagePaths, outputPath)
-          .catch((err) => {
-            console.error('Error al crear el PDF con imágenes:', err);
-          });
-      }
-    } catch (err) {
-      console.error(`Error al descargar la imagen ${i + 1}:`, err);
-    }
-  }
-}
 
 // Sección 7: Flujos de mensajes
 
-const flujo_nuevo = addKeyword(['dapinga'])
-  .addAction({ capture: true }, async (ctx, { flowDynamic, state, gotoFlow }) => {
+const flujo_nuevo = addKeyword(['dapinga']).addAction({ capture: true }, async (ctx, { flowDynamic, state, gotoFlow }) => {
     return gotoFlow(ropa);
-  });
+});
 
-  const ropa = addKeyword(["p"]).addAction(
-    async (ctx, { provider, flowDynamic, gotoFlow, endFlow }) => {
+const ropa = addKeyword([]).addAction(async (ctx, { provider, flowDynamic, gotoFlow, endFlow }) => {
       try {
-        console.log("=== Inicio del flujo 'ropa' ===");
-        console.log(`Mensaje recibido de ${ctx.from}: "${ctx.body}"`);
-        console.log(`Nombre del usuario: ${ctx.pushName}`);
-  
+        console.log(`=== Inicio del flujo 'ropa' === | Mensaje de ${ctx.from}: "${ctx.body}" | Usuario: ${ctx.pushName}`);
+
         // 1. Verificar estado del sistema
         console.log("Verificando el estado del sistema...");
         const sistemaRef = db.ref(`bot_clientes/${usuario_dinamico}/sistema`);
@@ -1714,10 +1621,11 @@ const flujo_nuevo = addKeyword(['dapinga'])
         const sistemaEstado = sistemaSnapshot.val();
         console.log(`Estado del sistema: ${sistemaEstado}`);
   
-        if (sistemaEstado !== "si") {
-          console.log("El sistema está apagado. Terminando flujo.");
-          return endFlow();
-        }
+        if (sistemaEstado !== "si"){
+            console.log("El sistema apagado. Terminando.")
+            endFlow();
+            return 
+        } 
   
         // 2. Verificar si es un cliente nuevo
         console.log("Verificando si el cliente es nuevo...");
@@ -1787,38 +1695,24 @@ const flujo_nuevo = addKeyword(['dapinga'])
           console.log("Mensaje Bienvenida enviado exitosamente.");
         }
         
-  
+
         // 5. Cliente existente
         console.log("Cliente existente. Verificando estado del chat...");
         const data_usuarios = snapshot.val();
         let usuario_activar_chat = data_usuarios.estado_chat;
         console.log(`Estado del chat para el usuario ${ctx.from}: ${usuario_activar_chat}`);
   
-        if (usuario_activar_chat !== "activo") {
-          console.log(`Chat desactivado para el usuario ${ctx.from}. No se tomará ninguna acción.`);
-          return endFlow();
-        }
+        if (usuario_activar_chat !== "activo") return console.log(`Chat desactivado usuario ${ctx.from}. No se tomará ninguna acción.`), endFlow();
   
         let tipo_de_envio = "nada";
         let text = ctx.body;
         let id_cliente = ctx.from + "@s.whatsapp.net";
         console.log(`Enviando indicador de escritura a ${id_cliente}...`);
         await provider.sendTypingIndicator(id_cliente);
-  
+        
         // 6. Obtener el clienteID para disparador manual
         const clienteID = ctx.from; // Número de teléfono del cliente
         console.log('clienteID:', clienteID); // Para verificar que esté definido
-  
-       /* // 7. Verificar si el mensaje contiene una palabra clave de disparador manual
-        console.log("Verificando disparadores manuales para el mensaje...");
-        const disparador = await disparadorManual(usuario_dinamico, text, clienteID);
-        if (disparador && disparador.length > 0) {
-          console.log("Disparador manual encontrado. Enviando mensajes correspondientes.");
-          console.log("Mensajes a enviar por disparador manual:", disparador);
-          await flowDynamic(disparador); // Ahora `disparador` es un array de mensajes
-          console.log("Mensajes de disparador manual enviados. Terminando flujo.");
-          return endFlow(); // Termina el flujo después de enviar los mensajes disponibles (imagen, PDF, texto).
-        } */ 
 
         // 8. Manejo de mensajes multimedia
         if (ctx.message && ctx.message.imageMessage && ctx.message.imageMessage.mimetype) {
@@ -1874,10 +1768,12 @@ const flujo_nuevo = addKeyword(['dapinga'])
           return endFlow(); 
         }
 
+        
+
         // 3. Si *no* coincide con disparadores manuales, sigue la lógica habitual:
         console.log("Sin disparador manual. Continuando con el flujo normal...");
         // Aquí sigues con tu manejo normal de “catálogo”, “menú”, GPT, etc.
-
+       
   
         const fechaYHoraActual_dos = new Date();
         const hora_dos = fechaYHoraActual_dos.toLocaleString('en-CO', { hora: 'numeric', minute: 'numeric', hour12: true });
@@ -1895,7 +1791,7 @@ const flujo_nuevo = addKeyword(['dapinga'])
           flowDynamic("Por favor coloca una pregunta más corta para poder entender bien.");
           return gotoFlow(flujo_nuevo);
         }
-  
+        
         const telefono = ctx.from;
         const responder_gpt = "si";
         const message = ctx;
@@ -1909,6 +1805,8 @@ const flujo_nuevo = addKeyword(['dapinga'])
         const consulta = text;
         const contenidoArchivo = fs.readFileSync(`usuarios/${usuario_dinamico}/productos.json`, "utf-8");
         const informacionProducto = JSON.parse(contenidoArchivo);
+
+        
   
         // 9. Verificación de coincidencias para confirmar códigos
         const mejoresCoincidencias_confirmar = stringSimilarity.findBestMatch(text, palabrasClaveConfirmar);
@@ -1945,53 +1843,9 @@ const flujo_nuevo = addKeyword(['dapinga'])
   
           return gotoFlow(flujo_nuevo);
         }
-  
-        // 10. Manejo de selección numérica de categorías
-        // if (!isNaN(text)) {
-        //   const numeroSeleccionado = parseInt(text);
-        //   if (numeroSeleccionado >= 1 && numeroSeleccionado <= categoria_disparadores.length) {
-        //     const categoriaSeleccionada = categoria_disparadores[numeroSeleccionado - 1];
-        //     text = categoriaSeleccionada;
-        //   }
-        // }
-  
-        // 11. Verificación de coincidencias en categorías de disparadores
+
         
-
-        // if (similitudMaxima_pijama >= umbralMinimo_pijama) {
-        //   const palabraSimilar = mejoresCoincidencias_pijama.bestMatch.target;
-        //   console.log(`Categoría similar encontrada: ${palabraSimilar}. Enviando catálogo.`);
-        //   flowDynamic(`Con gusto ya te envío el catálogo de ${palabraSimilar}`);
-  
-        //   const agregar = { role: "Vendedor", nombre: "Vendedor", content: `Con gusto ya te envío el catálogo de ${palabraSimilar}`, hora: hora, fecha: fecha };
-        //   agregarAlHistorialDeUsuario(telefono + "base_de_datos", agregar);
-        //   const obtener_historial = obtenerHistorialDeUsuario(telefono + "base_de_datos");
-        //   await db.ref('bot_clientes/' + usuario_dinamico + "/clientes").child(telefono).child("conversacion").set(obtener_historial);
-  
-        //   const pijamas = Object.keys(informacionProducto)
-        //     .filter(key => informacionProducto[key].categoria === palabraSimilar)
-        //     .map(key => informacionProducto[key]);
-  
-        //   const urlsDePijamas = pijamas.map(pijama => ({
-        //     body: `*${pijama.nombre_producto}*\n\n${pijama.empresa}\n\n*${pijama.precio}*`,
-        //     media: pijama.url,
-        //   }));
-  
-        //   if (urlsDePijamas.length === 1) {
-        //     flowDynamic([urlsDePijamas[0]]);
-        //   } else if (urlsDePijamas.length > 1) {
-        //     const primeraImagen = urlsDePijamas[0];
-        //     let ubicacion_catalogo = `usuarios/${usuario_dinamico}/${palabraSimilar}/${palabraSimilar}_catalogo.pdf`;
-        //     flowDynamic([primeraImagen, { body: `🐶 Te envío un archivo *pdf* con todas las imágenes*`, media: ubicacion_catalogo }]);
-        //   } else {
-        //     flowDynamic("No se encontraron imágenes para la categoría seleccionada.");
-        //   }
-  
-        //   return gotoFlow(flujo_nuevo);
-        // }
-  
-
-
+        // 11. Verificación de coincidencias en categorías de disparadores
 
         // 12. Verificación de palabras clave para catálogo y menú
         
@@ -2023,29 +1877,6 @@ const flujo_nuevo = addKeyword(['dapinga'])
         }
   
         // 13. Verificación de códigos de producto
-        
-        //Envio de catalogo de imagene revisar para eliminar del codigo
-        // if (similitudMaxima_confirmar_codigos >= umbralMinimo_confirmar_codigos) {
-        //   console.log("Coincidencia encontrada para código de producto. Enviando imagen del código.");
-        //   flowDynamic('Con gusto ya te envío la imagen del código');
-        //   const agregar = { role: "Vendedor", nombre: "Vendedor", content: 'Con gusto ya te envío la imagen del código', hora: hora, fecha: fecha };
-        //   agregarAlHistorialDeUsuario(telefono + "base_de_datos", agregar);
-        //   const obtener_historial = obtenerHistorialDeUsuario(telefono + "base_de_datos");
-        //   await db.ref('bot_clientes/' + usuario_dinamico + "/clientes").child(telefono).child("conversacion").set(obtener_historial);
-  
-        //   const pijamas = Object.keys(informacionProducto)
-        //     .filter(key => informacionProducto[key].codigo === codigoProducto)
-        //     .map(key => informacionProducto[key]);
-  
-        //   const urlsDePijamas = pijamas.map(pijama => ({
-        //     body: `*${pijama.nombre_producto}*\nCódigo: ${pijama.codigo}\nPrecio: *${pijama.precio}* COP`,
-        //     media: pijama.url,
-        //   }));
-  
-        //   console.log("Enviando imágenes del código de producto.");
-        //   flowDynamic(urlsDePijamas);
-        //   return gotoFlow(flujo_nuevo);
-        // }
   
         // 14. Manejo de archivos interesados
         const archivo = `./interesados/${ctx.from}.json`;
@@ -2070,100 +1901,52 @@ const flujo_nuevo = addKeyword(['dapinga'])
           const datosJSON = JSON.stringify(data, null, 2);
           fs.writeFileSync(archivo, datosJSON, "utf-8");
         }
-  
-        // 15. Manejo de historial y generación de respuesta con GPT
-        console.log("Obteniendo historial de conversación del cliente.");
-        const obtener_historial_del_cliente = obtenerHistorialDeUsuario(telefono);
-        let pasar_historial = obtener_historial_del_cliente;
-        if (pasar_historial.length >= 30) {
-          console.log("Historial de conversación excede el límite (30). Reduciendo a los últimos 10 mensajes.");
-          const ultimosDosElementos = pasar_historial.slice(-10);
-          pasar_historial = ultimosDosElementos;
-        }
-  
-        // Crear la respuesta usando ChatGPT
-        console.log("TEXT: "+text);
-        console.log("FROM: "+ctx.from);
-        const mensaje = await createCompletion(pasar_historial, text, archivo, usuario_dinamico, ctx.from);
-        console.log(`Respuesta generada: "${mensaje}"`);
+
         
-        // **Implementar el retraso antes de enviar la respuesta**
-        console.log(`Esperando ${tiempo_retraso_respuesta} ms antes de enviar la respuesta.`);
-        await sleep(tiempo_retraso_respuesta);
+        processingWithChatGPT(telefono, text, archivo, usuario_dinamico, ctx, flowDynamic, hora, fecha, gotoFlow, flujo_nuevo)
+  
+        // // 15. Manejo de historial y generación de respuesta con GPT
+        // console.log("Obteniendo historial de conversación del cliente.");
+        // const obtener_historial_del_cliente = obtenerHistorialDeUsuario(telefono);
+        // let pasar_historial = obtener_historial_del_cliente;
+        // if (pasar_historial.length >= 30) {
+        //   console.log("Historial de conversación excede el límite (30). Reduciendo a los últimos 10 mensajes.");
+        //   const ultimosDosElementos = pasar_historial.slice(-10);
+        //   pasar_historial = ultimosDosElementos;
+        // }
+  
+        // // Crear la respuesta usando ChatGPT
+        // console.log("TEXT: "+text);
+        // console.log("FROM: "+ctx.from);
+        // const mensaje = await createCompletion(pasar_historial, text, archivo, usuario_dinamico, ctx.from);
+        // console.log(`Respuesta generada: "${mensaje}"`);
         
-        console.log("Enviando respuesta al cliente.");
-        flowDynamic(mensaje);
+        // // **Implementar el retraso antes de enviar la respuesta**
+        // console.log(`Esperando ${tiempo_retraso_respuesta} ms antes de enviar la respuesta.`);
+        // //await sleep(tiempo_retraso_respuesta);
+        
+        // console.log("Enviando respuesta al cliente.");
+        // flowDynamic(mensaje);
   
-        const agregar_mensaje = { role: "system", content: mensaje };
-        agregarAlHistorialDeUsuario(ctx.from, agregar_mensaje);
+        // const agregar_mensaje = { role: "system", content: mensaje };
+        // agregarAlHistorialDeUsuario(ctx.from, agregar_mensaje);
   
-        const agregar = { role: "Vendedor", nombre: "Vendedor", content: mensaje, hora: hora, fecha: fecha };
-        agregarAlHistorialDeUsuario(telefono + "base_de_datos", agregar);
-        const obtener_historial = obtenerHistorialDeUsuario(telefono + "base_de_datos");
-        console.log("Actualizando historial de conversación en Firebase.");
-        await db.ref('bot_clientes/' + usuario_dinamico + "/clientes").child(telefono).child("conversacion").set(obtener_historial);
+        // const agregar = { role: "Vendedor", nombre: "Vendedor", content: mensaje, hora: hora, fecha: fecha };
+        // agregarAlHistorialDeUsuario(telefono + "base_de_datos", agregar);
+        // const obtener_historial = obtenerHistorialDeUsuario(telefono + "base_de_datos");
+        // console.log("Actualizando historial de conversación en Firebase.");
+        // await db.ref('bot_clientes/' + usuario_dinamico + "/clientes").child(telefono).child("conversacion").set(obtener_historial);
   
-        console.log("Terminando flujo y redirigiendo a 'flujo_nuevo'.");
-        return gotoFlow(flujo_nuevo);
+        // console.log("Terminando flujo y redirigiendo a 'flujo_nuevo'.");
+        // return gotoFlow(flujo_nuevo);
       } catch (error) {
         console.log("El sistema está apagado. No se tomará ninguna acción.", error);
         return endFlow(); // Termina el flujo si el sistema está apagado
       }
     }
-  );
- 
-  function getEmojiFromNumber(number) {
-    switch (number) {
-      case 1-1:
-        return '✅';
-      case 2-2:
-        return '✅';
-      case 3-3:
-        return '✅';
-      case 4-4:
-        return '✅';
-      case 5-5:
-        return '✅';
-      case 6-6:
-        return '✅';
-      case 7-7:
-        return '✅';
-      case 8-8:
-        return '✅';
-      case 9-9:
-        return '✅';
-      case 10-10:
-        return '✅✅';
-      case 11-11:
-        return '✅✅';
-      case 12-12:
-        return '✅✅';
-      case 13-13:
-        return '✅✅';
-      case 14-14:
-        return '✅✅';
-      case 15-15:
-        return '✅✅';
-      case 16-16:
-        return '✅✅';
-      case 17-17:
-        return '✅✅';
-      case 18-18:
-        return '✅✅';
-      case 19-19:
-        return '✅✅';
-      case 20-20:
-        return '✅✅';
-      default:
-        return number;
-    }
-  }
+);
 
 let activar_chat = "activo";
-
-function esperar_conectar() {
-  return "nada";
-}
 
 function actiar_chat(telefono) {
   const usuariosRef = db.ref('bot_clientes/' + usuario_dinamico);
@@ -2330,12 +2113,9 @@ function monitorearPublicidades(usuario, adapterProvider) {
   });
 }
 
-
 const silencio = addKeyword(['xxxxxxxx'])
   .addAction(async (ctx, { provider, flowDynamic, gotoFlow, fallBack, endFlow }) => {
     console.log("detenido el ", ctx.from);
-    const mensaje = await esperar_conectar();
-    if (mensaje == "nada") { }
 });
 
 //Crea el interesado en JSON Inicial
@@ -2351,147 +2131,13 @@ async function obtenerEstadoSistema(usuario) {
   return snapshot.val();
 }
 
-const flow_consultar_registro = addKeyword([EVENTS.WELCOME, EVENTS.VOICE_NOTE, EVENTS.MEDIA]).addAction(
-  async (ctx, { provider, flowDynamic, gotoFlow, fallBack, endFlow }) => {
-    console.log("Entro al Flujo BIENVENIDA Inicial")
-    const numeroDeTelefono = ctx.from;
-
-    try {
-      // Verificar el estado del sistema
-      const sistemaEstado = await obtenerEstadoSistema(usuario_dinamico);
-
-      if (sistemaEstado === "si") {
-        // Crear archivo JSON inicial
-        initializeClientFile(numeroDeTelefono);
-  
-        // Obtener el mensaje de bienvenida y su estado de activación desde Firebase
-  
-        db.ref('bot_clientes/' + usuario_dinamico + '/clientes').child(numeroDeTelefono).once('value')
-          .then(async snapshot => {
-            if (snapshot.exists()) {
-              const data_usuarios = snapshot.val();
-              activar_chat = data_usuarios.estado_chat;
-  
-              // Verificación si el cliente está detenido permanentemente
-              if (activar_chat === "detenido") {
-                console.log(`Cliente ${ctx.from} detenido permanentemente. No se tomará ninguna acción.`);
-                return endFlow(); // Termina el flujo si el cliente está detenido
-              }
-  
-              if (activar_chat == null) {
-                const agregar_variable = { estado_chat: "activo" };
-                db.ref('bot_clientes/' + usuario_dinamico + "/clientes").child(ctx.from).update(agregar_variable);
-                activar_chat = "activo";
-              } else {
-                if (data_usuarios.estado_chat == "desactivado_manual" || data_usuarios.estado_chat == "desactivado") {
-                  actiar_chat(ctx.from);
-                }
-              }
-  
-              // **Verificación de Disparadores Antes de Proceder**
-              console.log("Verificando disparadores en el flujo de registro.");
-              const textoMensaje = ctx.body || ''; // Obtener el mensaje del usuario
-              const disparador = await disparadorManual(usuario_dinamico, textoMensaje, numeroDeTelefono);
-              if (disparador && disparador.length > 0) {
-                console.log("Disparador encontrado en flujo de registro. Enviando respuesta personalizada.");
-                await flowDynamic(disparador); // Enviar mensajes de disparador
-                return endFlow(); // Terminar el flujo después de enviar disparador
-              }
-  
-              if (activar_chat == "activo") {
-                gotoFlow(ropa);
-              } else {
-                gotoFlow(silencio);
-              }
-            } else {
-              console.log(`Cliente nuevo detectado: ${ctx.from}. Iniciando proceso de registro.`);
-  
-              crearHistorialParaUsuario(ctx.from + "base_de_datos");
-              const numeroDeTelefono = ctx.from;
-              const agregar_uno = { role: "user", content: ctx.body };
-              agregarAlHistorialDeUsuario(ctx.from + "base_de_datos", agregar_uno);
-  
-              const fechaYHoraActual = new Date();
-              const datosFechaHora = {
-                fecha: fechaYHoraActual.toISOString().slice(0, 10),
-                hora: fechaYHoraActual.toLocaleTimeString(),
-                nombre: ctx.pushName,
-                nombre_sistema: ctx.pushName
-              };
-  
-              const fechaNumerica = fechaYHoraActual.getTime();
-              const datosFechaHora_dos = {
-                fecha_numero: Math.floor(fechaNumerica / 1000),
-                hora: fechaYHoraActual.toLocaleTimeString(),
-                nombre: ctx.pushName,
-                nombre_sistema: ctx.pushName,
-                estado_chat: "activo"
-              };
-  
-              db.ref('bot_clientes/' + usuario_dinamico + "/clientes").child(ctx.from).update(datosFechaHora_dos);
-              db.ref('bot_clientes/' + usuario_dinamico + "/clientes").child(ctx.from).child("registro").update(datosFechaHora);
-              console.log(`Datos del cliente ${ctx.from} actualizados en Firebase:`, datosFechaHora_dos);
-  
-              
-  
-              // **Verificación de Disparadores Antes de Enviar Mensaje Inicial**
-              console.log("Verificando disparadores en el flujo de registro para nuevo cliente.");
-              const textoMensajeNuevo = ctx.body || ''; // Obtener el mensaje del usuario
-              const disparadorNuevo = await disparadorManual(usuario_dinamico, textoMensajeNuevo, numeroDeTelefono);
-              console.log("Disparador encontrado en flujo de registro para nuevo cliente. Enviando respuesta personalizada.");
-              if (disparadorNuevo && disparadorNuevo.length > 0) {
-                await flowDynamic(disparadorNuevo); // Enviar mensajes de disparador
-                return endFlow(); // Terminar el flujo después de enviar disparador
-              } 
-              
-              // Enviar el mensaje al usuario
-              if (activar_chat === "activo") {
-                try {
-                  // Obtener el mensaje de bienvenida y su estado de activación desde Firebase
-                  const bienvenidaRef = db.ref(`bot_clientes/${usuario_dinamico}/a_servidor`);
-                  const [bienvenidaSnapshotNuevo] = await Promise.all([
-                    bienvenidaRef.child('Bienvenida').once('value'),
-                  ]); 
-                  
-                  const mensajeBienvenidaNuevo = bienvenidaSnapshotNuevo.val() || '';
-
-                  console.log('Enviando mensaje al nuevo cliente:', mensajeBienvenidaNuevo, ' al numero: ', ctx.from); 
-                  await flowDynamic([{ body: mensajeBienvenidaNuevo }]);
-                  console.log("Mensaje enviado exitosamente.");
-                } catch (error) {
-                  console.error('Error al enviar el mensaje con flowDynamic:', error);
-                }
-              } else {
-                console.log('SILENCIO: '+ activar_chat)
-                gotoFlow(silencio);
-              }
-            }
-          })
-          .catch(error => {
-            console.error('Error al consultar la base de datos:', error);
-          });
-      } else {
-        console.log("El sistema está apagado. No se tomará ninguna acción.");
-        return endFlow(); // Termina el flujo si el sistema está apagado
-      }
-    } catch (e) {
-      console.error("Error en el flujo de Inicio:", er);
-      return endFlow();
-    }
-  }
-);
-
-// Sección 8: Función principal
+// Sección 8: Función principalm
 const main_dos = async (user_id) => {
   cargarMensajeASoporte(user_id); // Cargar mensaje a soporte para el usuario
-  cargarFraseCatalogo(user_id);
 
-  const adapterDB = new MockAdapter();
+  const adapterDB = new FirebaseAdapter({db});
   const adapterFlow = createFlow([
-    flow_consultar_registro,
-    ropa,
-    silencio,
-    flujo_nuevo,
+    ropa
   ]);
   
   const fs = require('fs');
@@ -2620,8 +2266,6 @@ const main_dos = async (user_id) => {
       });
   }
 
-
-
   fs.readFile('clientes_bot.json', 'utf8', (err, data) => {
     if (err) {
       console.error('Error al leer el archivo clientes.json:', err);
@@ -2685,6 +2329,42 @@ const main_dos = async (user_id) => {
 };
 
 module.exports = main_dos;
+
+async function processingWithChatGPT(telefono, text, archivo, usuario_dinamico, ctx, flowDynamic, hora, fecha, gotoFlow, flujo_nuevo) {
+  console.log("Obteniendo historial de conversación del cliente.");
+  const obtener_historial_del_cliente = obtenerHistorialDeUsuario(telefono);
+  let pasar_historial = obtener_historial_del_cliente;
+  if (pasar_historial.length >= 30) {
+    console.log("Historial de conversación excede el límite (30). Reduciendo a los últimos 10 mensajes.");
+    const ultimosDosElementos = pasar_historial.slice(-10);
+    pasar_historial = ultimosDosElementos;
+  }
+
+  // Crear la respuesta usando ChatGPT
+  console.log("TEXT: "+text);
+  console.log("FROM: "+ctx.from);
+  const mensaje = await createCompletion(pasar_historial, text, archivo, usuario_dinamico, ctx.from);
+  console.log(`Respuesta generada: "${mensaje}"`);
+  
+  // **Implementar el retraso antes de enviar la respuesta**
+  console.log(`Esperando ${tiempo_retraso_respuesta} ms antes de enviar la respuesta.`);
+  //await sleep(tiempo_retraso_respuesta);
+  
+  console.log("Enviando respuesta al cliente.");
+  flowDynamic(mensaje);
+
+  const agregar_mensaje = { role: "system", content: mensaje };
+  agregarAlHistorialDeUsuario(ctx.from, agregar_mensaje);
+
+  const agregar = { role: "Vendedor", nombre: "Vendedor", content: mensaje, hora: hora, fecha: fecha };
+  agregarAlHistorialDeUsuario(telefono + "base_de_datos", agregar);
+  const obtener_historial = obtenerHistorialDeUsuario(telefono + "base_de_datos");
+  console.log("Actualizando historial de conversación en Firebase.");
+  await db.ref('bot_clientes/' + usuario_dinamico + "/clientes").child(telefono).child("conversacion").set(obtener_historial);
+
+  console.log("Terminando flujo y redirigiendo a 'flujo_nuevo'.");
+  return gotoFlow(flujo_nuevo);
+}
 
 const args = process.argv.slice(2);
 const usuarioNuevo = args.find(arg => arg.startsWith('--usuario_nuevo=')).split('=')[1];
