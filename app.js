@@ -1,4 +1,4 @@
-require("./instrument");
+//require("./instrument");
 
 const FirebaseAdapter = require("./FirebaseAdapter")
 

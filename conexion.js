@@ -17,33 +17,37 @@ let clavesAnteriores = []; // Variable para almacenar las claves anteriores
 // Función para cargar usuarios y generar configuración
 async function cargarUsuarios() {
     try {
-        const usuariosRef = db.ref('bot_clientes');
-        usuariosRef.on('value', async (snapshot) => {
-            const clavesActuales = Object.keys(snapshot.val());
-            console.log('Claves de usuarios en bot_clientes:', clavesActuales);
-
-            // Comparamos las claves actuales con las anteriores
-            const cambios = obtenerCambios(clavesActuales);
-
-            const apiKey = 'api-openai-de-la-cuenta-del-usuario-final'; // Reemplaza 'valor1' con el valor real de apiKey
-            const organizacion = 'org-openai-del-usuario'; // Reemplaza 'valor2' con el valor real de organizacion
-
-
-            // Si hay cambios, generamos la configuración y ejecutamos PM2
-            if (cambios.length > 0) {
-                await generarConfiguracion(clavesActuales, apiKey, organizacion);
-                ejecutarPM2(clavesActuales);
-            } else {
-                console.log('No hay cambios en las claves de usuarios en bot_clientes.');
-            }
-            
-            // Actualizamos las claves anteriores
-            clavesAnteriores = clavesActuales;
+        const usuariosRef = db.ref("bot_clientes");
+        usuariosRef.on("value", async (snapshot) => {
+          const data = snapshot.val();
+    
+          if (!data) {
+            console.log("No hay usuarios en bot_clientes.");
+            return;
+          }
+    
+          const clavesActuales = Object.keys(data);
+          console.log("Claves de usuarios en bot_clientes:", clavesActuales);
+    
+          // Detectar cambios
+          const nuevosUsuarios = obtenerCambios(clavesActuales);
+    
+          if (nuevosUsuarios.length > 0) {
+            console.log("Nuevos usuarios detectados:", nuevosUsuarios);
+            await generarConfiguracion(clavesActuales);
+            await ejecutarPM2(nuevosUsuarios);
+          } else {
+            console.log("No hay cambios en las claves de usuarios en bot_clientes.");
+          }
+    
+          // Actualizar claves anteriores
+          clavesAnteriores = clavesActuales;
         });
-        console.log('Escuchando cambios en bot_clientes...');
-    } catch (error) {
-        console.error('Error:', error);
-    }
+    
+        console.log("Escuchando cambios en bot_clientes...");
+      } catch (error) {
+        console.error("Error al cargar usuarios:", error);
+      }
 }
 
 // Función para obtener los cambios entre las claves actuales y anteriores
@@ -53,22 +57,22 @@ function obtenerCambios(clavesActuales) {
 }
 
 // Función para generar configuración en el archivo ecosystem.config.js
-async function generarConfiguracion(usuarios, apiKey, organizacion) {
-    const apps = usuarios.map((usuario) => ({
+async function generarConfiguracion(usuarios) {
+    try {
+      const apps = usuarios.map((usuario) => ({
         name: usuario,
-        script: 'app.js',
+        script: "app.js",
         args: `--usuario_nuevo=${usuario}`,
-        env: {
-            API_KEY: apiKey,
-            ORGANIZACION: organizacion
-        },
         instances: 1,
-        exec_mode: 'fork',
-    }));
-
-    const config = `module.exports = { apps: ${JSON.stringify(apps, null, 2)} };`;
-    fs.writeFileSync('ecosystem.config.js', config);
-    console.log('Archivo ecosystem.config.js actualizado con todos los usuarios.');
+        exec_mode: "fork",
+      }));
+  
+      const config = `module.exports = { apps: ${JSON.stringify(apps, null, 2)} };`;
+      fs.writeFileSync("ecosystem.config.js", config);
+      console.log("Archivo ecosystem.config.js actualizado.");
+    } catch (error) {
+      console.error("Error al generar el archivo de configuración:", error);
+    }
 }
 
 // Función para ejecutar pm2 start
